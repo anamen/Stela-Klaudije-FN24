@@ -67,6 +67,46 @@
             top: 10px;
             left: 10px;
         }
+	/* Tablet Styles */
+        @media screen and (min-width: 768px) and (max-width: 1024px) {
+            body {
+                flex-direction: row;
+            }
+
+            #canvas-container {
+                height: 70%;
+            }
+
+            #elements-container {
+                width: 40%;
+            }
+
+            button {
+                width: 100%;
+                padding: 10px;
+                margin: 5px 0;
+            }
+        }
+
+        /* PC Styles */
+        @media screen and (min-width: 1024px) {
+            body {
+                flex-direction: row;
+            }
+
+            #canvas-container {
+                height: 80%;
+            }
+
+            #elements-container {
+                width: 300px;
+            }
+
+            button {
+                padding: 10px;
+            }
+        }
+
     </style>
 </head>
 <body>
