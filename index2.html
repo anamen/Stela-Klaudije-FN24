@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale: 1.0">
+    <title>Stela koja priča o životu Klaudije</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            height: 100vh;
+            margin: 0;
+        }
+
+        #canvas-container {
+            position: relative;
+            flex-grow: 1;
+            background-color: black;
+            overflow: hidden;
+            cursor: grab;
+        }
+
+        #canvas {
+            border: 1px solid black;
+            cursor: crosshair;
+        }
+
+        #elements-container {
+            width: 300px;
+            background-color: #4CAF50;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            justify-content: flex-start;
+            overflow-y: auto;
+        }
+
+        #undo-delete {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        button {
+            padding: 10px;
+            cursor: pointer;
+        }
+
+        #saveButton {
+            background-color: red;
+            color: white;
+            font-size: 16px;
+            font-weight: bold;
+            margin-top: 20px;
+        }
+
+        #tools-container input,
+        #tools-container select,
+        #tools-container textarea {
+            margin-bottom: 10px;
+            width: 100%;
+        }
+
+        #canvas-controls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+        }
+    </style>
+</head>
+<body>
+
+<div id="canvas-container">
+    <canvas id="canvas" width="600" height="800"></canvas>
+</div>
+
+<div id="elements-container">
+    <select id="elementsDropdown">
+        <option value="">Select Element</option>
+        <option value="element1">Element 1</option>
+        <option value="element2">Element 2</option>
+        <option value="element3">Element 3</option>
+        <option value="element4">Element 4</option>
+        <option value="element5">Element 5</option>
+        <option value="element6">Element 6</option>
+        <option value="element7">Element 7</option>
+        <option value="element8">Element 8</option>
+        <option value="element9">Element 9</option>
+        <option value="element10">Element 10</option>
+        <option value="element11">Element 11</option>
+        <option value="element12">Element 12</option>
+    </select>
+
+    <label for="brushColor">Brush Color:</label>
+    <input type="color" id="brushColor" value="#000000">
+
+    <label for="brushSize">Brush Size:</label>
+    <input type="number" id="brushSize" min="1" max="20" value="5">
+
+    <label for="text-input">Add Text:</label>
+    <textarea id="text-input" placeholder="Enter text"></textarea>
+    <button id="add-text-btn">Add Text</button>
+
+    <label for="fontSize">Font Size:</label>
+    <input type="number" id="fontSize" value="20" min="10" max="50">
+
+    <label for="textColor">Text Color:</label>
+    <input type="color" id="textColor" value="#000000">
+
+    <div id="undo-delete">
+        <button id="undo">Undo</button>
+        <button id="delete">Delete</button>
+    </div>
+
+    <button id="draw-toggle-btn">Enable Drawing</button>
+    <button id="resize-toggle-btn">Enable Resize</button>
+    <button id="move-toggle-btn">Enable Move</button>
+
+    <button id="saveButton">Save Drawing</button>
+</div>
+
+<script>
+    const canvas = document.getElementById("canvas");
+    const ctx = canvas.getContext("2d");
+    const background = new Image();
+    background.src = "1.svg";
+
+    let objects = [];
+    let isDrawing = false;
+    let isResizing = false;
+    let isMoving = false;
+    let selectedObject = null;
+    let startX, startY;
+    let offsetX, offsetY;
+    let startWidth, startHeight;
+    let currentStroke = [];
+
+    const brushColorInput = document.getElementById("brushColor");
+    const brushSizeInput = document.getElementById("brushSize");
+
+    // Helper: Get Event Position (Unified for Mouse and Touch)
+    const getEventPosition = (e) => {
+        const rect = canvas.getBoundingClientRect();
+        if (e.touches && e.touches.length > 0) {
+            const touch = e.touches[0];
+            return {
+                x: touch.clientX - rect.left,
+                y: touch.clientY - rect.top,
+            };
+        } else {
+            return {
+                x: e.clientX - rect.left,
+                y: e.clientY - rect.top,
+            };
+        }
+    };
+
+    // Redraw Canvas
+    const redrawCanvas = () => {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(background, 0, 0, canvas.width, canvas.height);
+        objects.forEach((obj) => {
+            if (obj.type === "image") {
+                const img = new Image();
+                img.src = obj.src;
+                img.onload = () => ctx.drawImage(img, obj.x, obj.y, obj.width, obj.height);
+            } else if (obj.type === "brush") {
+                ctx.strokeStyle = obj.color;
+                ctx.lineWidth = obj.size;
+                ctx.beginPath();
+                obj.points.forEach((point, index) => {
+                    if (index === 0) {
+                        ctx.moveTo(point.x, point.y);
+                    } else {
+                        ctx.lineTo(point.x, point.y);
+                    }
+                });
+                ctx.stroke();
+            }
+        });
+    };
+
+    // Handle Start Event
+    const handleStart = (e) => {
+        e.preventDefault();
+        const { x, y } = getEventPosition(e);
+        if (isDrawing) {
+            currentStroke = [{ x, y }];
+        } else if (isMoving || isResizing) {
+            startX = x;
+            startY = y;
+            selectedObject = objects.find((obj) =>
+                obj.type === "image"
+                    ? x > obj.x && x < obj.x + obj.width && y > obj.y && y < obj.y + obj.height
+                    : false
+            );
+        }
+    };
+
+    // Handle Move Event
+    const handleMove = (e) => {
+        e.preventDefault();
+        const { x, y } = getEventPosition(e);
+        if (isDrawing && currentStroke.length > 0) {
+            currentStroke.push({ x, y });
+            redrawCanvas();
+            ctx.strokeStyle = brushColorInput.value;
+            ctx.lineWidth = parseInt(brushSizeInput.value, 10);
+            ctx.beginPath();
+            ctx.moveTo(currentStroke[currentStroke.length - 2].x, currentStroke[currentStroke.length - 2].y);
+            ctx.lineTo(x, y);
+            ctx.stroke();
+        } else if (selectedObject && isMoving) {
+            const dx = x - startX;
+            const dy = y - startY;
+            selectedObject.x += dx;
+            selectedObject.y += dy;
+            startX = x;
+            startY = y;
+            redrawCanvas();
+        }
+    };
+
+    // Handle End Event
+    const handleEnd = (e) => {
+        if (isDrawing && currentStroke.length > 0) {
+            objects.push({
+                type: "brush",
+                points: currentStroke,
+                color: brushColorInput.value,
+                size: parseInt(brushSizeInput.value, 10),
+            });
+            currentStroke = [];
+        }
+        selectedObject = null;
+    };
+
+    // Attach Event Listeners
+    canvas.addEventListener("mousedown", handleStart);
+    canvas.addEventListener("mousemove", handleMove);
+    canvas.addEventListener("mouseup", handleEnd);
+    canvas.addEventListener("touchstart", handleStart, { passive: false });
+    canvas.addEventListener("touchmove", handleMove, { passive: false });
+    canvas.addEventListener("touchend", handleEnd, { passive: false });
+
+    // Initialize Canvas
+    background.onload = redrawCanvas;
+</script>
+
